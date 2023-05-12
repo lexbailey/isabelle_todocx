@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+name=document.docx
+dir="${name}.d"
+
+rm -rf "$dir" "$name"
+cp -r template.docx.d "$dir"
+rm -f "$name"
+
+./gen_doc_xml banks.html "$dir/word/document.xml"
+
+pushd "$dir"
+zip -r "../$name" .
+popd

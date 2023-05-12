@@ -1,0 +1,265 @@
+#!/usr/bin/env python3
+
+import argparse
+from html.parser import HTMLParser
+from xml.sax.saxutils import escape
+
+p = argparse.ArgumentParser(__name__)
+p.add_argument("input")
+p.add_argument("output")
+args = p.parse_args()
+
+def p(runs, props=None):
+    if props:
+        return r"""<w:p><w:pPr>{}</w:pPr>{}</w:p>""".format(props, runs)
+    return r"""<w:p>{}</w:p>""".format(runs)
+
+def run(tokens, props=None):
+    if props:
+        return r"""<w:r><w:rPr>{}</w:rPr>{}</w:r>""".format(props, tokens)
+    return r"""<w:r>{}</w:r>""".format(tokens)
+
+def token(text):
+    # be efficient with tokens, only use space=preserve if needed
+    if text == '':
+        return r"""<w:t></w:t>"""
+    if text[0] in ' \t' or text[-1] in ' \t':
+        return r"""<w:t xml:space="preserve">{}</w:t>""".format(escape(text))
+    return r"""<w:t>{}</w:t>""".format(escape(text))
+
+def color(c):
+    return r"""<w:color w:val="{:06X}"/>""".format(c)
+
+def bgcolor(c):
+    return r"""<w:shd w:val="clear" w:color="auto" w:fill="{:06X}"/>""".format(c)
+
+def bold():
+    return "<w:b/>"
+
+def italic():
+    return "<w:i/>"
+
+def font(f):
+    return "" # TODO
+
+def fontsize(s):
+    return r"""<w:sz w:val="{s}"/><w:szCs w:val="{s}"/>""".format(s=s)
+
+def vertAlign(a):
+    return r"""<w:vertAlign w:val="{}"/>""".format(a)
+
+styles = {
+#'hidden':          [ font-family: Vacuous; font-size: 1%; color: rgba(255,255,255,0); }
+'hidden':          { 'fs':fontsize(1) }
+,'sub': {'vert': vertAlign("subscript")}
+,'sup': {'vert': vertAlign("superscript")}
+,'control':        { 'b':bold(), 'i':italic() }
+,'binding':        { 'c':color(0x336655) }
+,'tfree':          { 'c':color(0xA020F0) }
+,'tvar':           { 'c':color(0xA020F0) }
+,'free':           { 'c':color(0x0000FF) }
+,'skolem':         { 'c':color(0xD2691E) }
+,'bound':          { 'c':color(0x008000) }
+,'var':            { 'c':color(0x00009B) }
+,'numeral':        { }
+,'literal':        { 'b':bold() }
+,'delimiter':      { }
+,'inner_numeral':  { 'c':color(0xFF0000) }
+,'inner_quoted':   { 'c':color(0xFF00CC) }
+,'inner_cartouche':{ 'c':color(0xCC6600) }
+,'comment1':       { 'c':color(0xCC0000) }
+,'comment2':       { 'c':color(0xFF8400) }
+,'comment3':       { 'c':color(0x6600CC) }
+,'dynamic':        { 'c':color(0x7BA428) }
+,'class_parameter_color': { 'c':color(0xD2691E) }
+,'bold':           { 'b':bold() }
+,'main':           { 'c':color(0x000000) }
+,'command':        { 'b':bold() }
+,'keyword':        { 'b':bold() }
+,'keyword1':       { 'c':color(0x006699) }
+,'keyword2':       { 'c':color(0x009966) }
+,'keyword3':       { 'c':color(0x0099FF) }
+,'quasi_keyword':  { 'c':color(0x9966FF) }
+,'operator':       { 'c':color(0x323232) }
+,'string':         { 'c':color(0xFF00CC) }
+,'alt_string':     { 'c':color(0xCC00CC) }
+,'verbatim':       { 'c':color(0x6600CC) }
+,'cartouche':      { 'c':color(0xCC6600) }
+,'comment':        { 'c':color(0xCC0000) }
+,'improper':       { 'c':color(0xFF5050) }
+,'antiquote':      { 'c':color(0x6600CC) }
+,'raw_text':       { 'c':color(0x6600CC) }
+,'plain_text':     { 'c':color(0xCC6600) }
+,'bad':            { 'bgc':bgcolor(0xFF6A6A) }
+,'quoted':         { 'bgc':bgcolor(0xCACACA) }
+,'antiquoted':     { 'bgc':bgcolor(0xFFC832) }
+}
+
+def build_style(l):
+    props = {}
+    for s in l:
+        props.update(styles.get(s, {}))
+    proptext = ''.join(props.values())
+    return proptext
+        
+
+class IsabelleDocumentParser(HTMLParser):
+    def __init__(self):
+        super(IsabelleDocumentParser, self).__init__()
+        self.in_pre = 0
+        self.outdoc = ""
+        self.curline = ""
+        self.class_stack = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "pre":
+            print("start", tag)
+            self.in_pre += 1
+        if tag in ["sub", "sup"]:
+            self.class_stack.append(tag)
+        class_ = dict(attrs).get('class')
+        self.class_stack.append(class_)
+
+    def handle_endtag(self, tag):
+        if tag == "pre":
+            print("end", tag)
+            self.in_pre -= 1
+            if self.in_pre == 0:
+                self.outdoc += p(self.curline)
+        self.class_stack.pop()
+        if tag in ["sub", "sup"]:
+            self.class_stack.pop()
+
+    def handle_data(self, data):
+        props = build_style(self.class_stack)
+        if self.in_pre > 0:
+            lines = data.split('\n')
+            if len(lines) == 1:
+                self.curline += run(token(lines[0]), props=props)
+            else:
+                for l in lines[0:-1]:
+                    self.curline += run(token(l), props=props)
+                    self.outdoc += p(self.curline)
+                    self.curline = ""
+                self.curline = run(token(lines[-1]), props=props)
+
+infile = open(args.input, "r")
+outfile = open(args.output, "w+")
+
+iparser = IsabelleDocumentParser()
+iparser.feed(infile.read())
+
+
+doc_pre = r"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex" xmlns:cx1="http://schemas.microsoft.com/office/drawing/2015/9/8/chartex" xmlns:cx2="http://schemas.microsoft.com/office/drawing/2015/10/21/chartex" xmlns:cx3="http://schemas.microsoft.com/office/drawing/2016/5/9/chartex" xmlns:cx4="http://schemas.microsoft.com/office/drawing/2016/5/10/chartex" xmlns:cx5="http://schemas.microsoft.com/office/drawing/2016/5/11/chartex" xmlns:cx6="http://schemas.microsoft.com/office/drawing/2016/5/12/chartex" xmlns:cx7="http://schemas.microsoft.com/office/drawing/2016/5/13/chartex" xmlns:cx8="http://schemas.microsoft.com/office/drawing/2016/5/14/chartex" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:aink="http://schemas.microsoft.com/office/drawing/2016/ink" xmlns:am3d="http://schemas.microsoft.com/office/drawing/2017/model3d" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:oel="http://schemas.microsoft.com/office/2019/extlst" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:w10="urn:schemas-microsoft-com:office:word" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml" xmlns:w16cex="http://schemas.microsoft.com/office/word/2018/wordml/cex" xmlns:w16cid="http://schemas.microsoft.com/office/word/2016/wordml/cid" xmlns:w16="http://schemas.microsoft.com/office/word/2018/wordml" xmlns:w16du="http://schemas.microsoft.com/office/word/2023/wordml/word16du" xmlns:w16sdtdh="http://schemas.microsoft.com/office/word/2020/wordml/sdtdatahash" xmlns:w16se="http://schemas.microsoft.com/office/word/2015/wordml/symex" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" mc:Ignorable="w14 w15 w16se w16cid w16 w16cex w16sdtdh wp14">
+  <w:body>
+"""
+doc_post = r"""
+    <w:sectPr w:rsidR="00DF796C">
+      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/>
+      <w:cols w:space="708"/>
+      <w:docGrid w:linePitch="360"/>
+    </w:sectPr>
+  </w:body>
+</w:document>
+"""
+
+outfile.write(doc_pre)
+outfile.write(iparser.outdoc)
+outfile.write(doc_post)
+
+font_defs = """
+@font-face {
+  font-family: 'Isabelle DejaVu Sans';
+  src: url('../fonts/IsabelleDejaVuSans.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Isabelle DejaVu Sans';
+  src: url('../fonts/IsabelleDejaVuSans-Bold.ttf') format('truetype');
+  font-weight: bold;
+}
+
+@font-face {
+  font-family: 'Isabelle DejaVu Sans';
+  src: url('../fonts/IsabelleDejaVuSans-Oblique.ttf') format('truetype');
+  font-style: italic;
+}
+
+@font-face {
+  font-family: 'Isabelle DejaVu Sans';
+  src: url('../fonts/IsabelleDejaVuSans-BoldOblique.ttf') format('truetype');
+  font-weight: bold;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: 'Isabelle DejaVu Sans Mono';
+  src: url('../fonts/IsabelleDejaVuSansMono.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Isabelle DejaVu Sans Mono';
+  src: url('../fonts/IsabelleDejaVuSansMono-Bold.ttf') format('truetype');
+  font-weight: bold;
+}
+
+@font-face {
+  font-family: 'Isabelle DejaVu Sans Mono';
+  src: url('../fonts/IsabelleDejaVuSansMono-Oblique.ttf') format('truetype');
+  font-style: italic;
+}
+
+@font-face {
+  font-family: 'Isabelle DejaVu Sans Mono';
+  src: url('../fonts/IsabelleDejaVuSansMono-BoldOblique.ttf') format('truetype');
+  font-weight: bold;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: 'Isabelle DejaVu Serif';
+  src: url('../fonts/IsabelleDejaVuSerif.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Isabelle DejaVu Serif';
+  src: url('../fonts/IsabelleDejaVuSerif-Bold.ttf') format('truetype');
+  font-weight: bold;
+}
+
+@font-face {
+  font-family: 'Isabelle DejaVu Serif';
+  src: url('../fonts/IsabelleDejaVuSerif-Italic.ttf') format('truetype');
+  font-style: italic;
+}
+
+@font-face {
+  font-family: 'Isabelle DejaVu Serif';
+  src: url('../fonts/IsabelleDejaVuSerif-BoldItalic.ttf') format('truetype');
+  font-weight: bold;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: 'Vacuous';
+  src: url('../fonts/Vacuous.ttf') format('truetype');
+}
+"""
+
+ignored_styles="""
+.source   {
+  direction: ltr; unicode-bidi: bidi-override;
+  background-color: #FFFFFF;
+  padding: 10px;
+  font-family: "Isabelle DejaVu Sans Mono", monospace;
+}
+
+.contents { background-color: #FFFFFF; padding: 10px; }
+.sessions { background-color: #FFFFFF; padding: 10px; }
+.document { white-space: normal; font-family: "Isabelle DejaVu Serif", serif; }
+.name     { font-style: italic; }
+.filename { font-family: "Isabelle DejaVu Sans Mono", monospace; }
+"""
+

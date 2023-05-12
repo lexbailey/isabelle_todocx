@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+set -e
+
+if [ $# -ne 2 ]; then
+    echo "Usage: $0 <file_a.docx> <fileb.docx>"
+    exit 1
+fi
+
+file_a=$(realpath "$1")
+name_a=$(basename "$1")
+file_b=$(realpath "$2")
+name_b=$(basename "$2")
+
+tmp="./meld_temp"
+rm -rf -- "$tmp"
+mkdir -- "$tmp"
+
+format_xml(){
+    for xmlfile in $(find . -iname '*.rels' -o -iname '*.xml') ; do
+        echo "xmllint \"$xmlfile\" | sponge \"$xmlfile\""
+        xmllint --format "$xmlfile" | sponge "$xmlfile"
+    done
+}
+
+pushd "$tmp"
+    mkdir "$name_a.d"
+    mkdir "$name_b.d"
+    pushd "$name_a.d"
+        unzip "$file_a"
+    popd
+    pushd "$name_b.d"
+        unzip "$file_b"
+    popd
+    format_xml
+    meld "$name_a.d" "$name_b.d"
+popd
+
