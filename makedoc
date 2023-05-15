@@ -7,14 +7,16 @@ if [ $# != 2 ]; then
     exit 1
 fi
 
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
 name="$2"
 dir="${name}.d"
 
 rm -rf "$dir" "$name"
-cp -r template.docx.d "$dir"
+cp -r "${SCRIPT_DIR}/template.docx.d" "$dir"
 rm -f "$name"
 
-./gen_doc_xml "$1" "$dir/word/document.xml"
+"${SCRIPT_DIR}/gen_doc_xml" "$1" "$dir/word/document.xml"
 
 pushd "$dir" > /dev/null
 zip -q -r "../$name" .
