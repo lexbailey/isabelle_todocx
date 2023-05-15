@@ -1,14 +1,21 @@
 #!/usr/bin/env bash
 
-name=document.docx
+set -e
+
+if [ $# != 2 ]; then
+    echo "Usage: $0 <input.html> <output.docx>" >&2
+    exit 1
+fi
+
+name="$2"
 dir="${name}.d"
 
 rm -rf "$dir" "$name"
 cp -r template.docx.d "$dir"
 rm -f "$name"
 
-./gen_doc_xml banks.html "$dir/word/document.xml"
+./gen_doc_xml "$1" "$dir/word/document.xml"
 
-pushd "$dir"
-zip -r "../$name" .
-popd
+pushd "$dir" > /dev/null
+zip -q -r "../$name" .
+popd > /dev/null
