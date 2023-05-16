@@ -91,7 +91,7 @@ styles = {
 ,'raw_text':       { 'c':color(0x6600CC) }
 ,'plain_text':     { 'c':color(0xCC6600) }
 ,'bad':            { 'bgc':bgcolor(0xFF6A6A) }
-,'quoted':         { 'bgc':bgcolor(0xCACACA) }
+,'quoted':         { 'bgc':bgcolor(0xEAEAEA) }
 ,'antiquoted':     { 'bgc':bgcolor(0xFFC832) }
 }
 
