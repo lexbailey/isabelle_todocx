@@ -95,8 +95,10 @@ styles = {
 ,'antiquoted':     { 'bgc':bgcolor(0xFFC832) }
 }
 
+default_font="""<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/>"""
+
 def build_style(l):
-    props = {}
+    props = {'font':default_font}
     for s in l:
         props.update(styles.get(s, {}))
     proptext = ''.join(props.values())
@@ -129,8 +131,8 @@ class IsabelleDocumentParser(HTMLParser):
             self.class_stack.pop()
 
     def handle_data(self, data):
-        props = build_style(self.class_stack)
         if self.in_pre > 0:
+            props = build_style(self.class_stack)
             lines = data.split('\n')
             if len(lines) == 1:
                 self.curline += run(token(lines[0]), props=props)
@@ -162,6 +164,7 @@ doc_post = r"""
   </w:body>
 </w:document>
 """
+
 
 outfile.write(doc_pre)
 outfile.write(iparser.outdoc)

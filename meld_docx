@@ -18,7 +18,6 @@ mkdir -- "$tmp"
 
 format_xml(){
     for xmlfile in $(find . -iname '*.rels' -o -iname '*.xml') ; do
-        echo "xmllint \"$xmlfile\" | sponge \"$xmlfile\""
         xmllint --format "$xmlfile" | sponge "$xmlfile"
     done
 }
